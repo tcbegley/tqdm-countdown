@@ -1,3 +1,4 @@
+# copied from tqdm.autonotebook
 import os
 import sys
 

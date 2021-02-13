@@ -6,10 +6,12 @@ os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "hide"
 import pygame  # noqa
 
 try:
-    from importlib.resources import files
+    from importlib.resources import files  # type: ignore
 except ImportError:
     # if using Python 3.8 import from the backport
     from importlib_resources import files
+
+__all__ = ["CountdownMixin"]
 
 pygame.mixer.init()
 pygame.mixer.music.load(
@@ -30,7 +32,6 @@ class CountdownMixin:
         total = self.total
         n = self.n
         time = self._time
-        start_t = self.start_t if hasattr(self, "start_t") else 0
         rate = self._ema_dn() / self._ema_dt() if self._ema_dt() else None
         initial = self.initial
 
@@ -39,24 +40,28 @@ class CountdownMixin:
         try:
             for obj in iterable:
                 yield obj
-                # Update and possibly print the progressbar.
-                # Note: does not call self.update(1) for speed optimisation.
+
+                # calculate time remaining and possibly start music
                 n += 1
 
-                elapsed = time() - start_t
+                if n - initial == 1:
+                    # don't include initial iteration in elapsed time
+                    # makes us sensitive to overhead from widget creation
+                    # ... I think anyway?
+                    time_1 = time()
 
-                if rate is None and elapsed:
-                    rate = (n - initial) / elapsed
+                if not music_playing and n - initial >= 3:
+                    elapsed = time() - time_1
 
-                remaining = (total - n) / rate if rate and total else None
+                    if rate is None and elapsed:
+                        rate = (n - initial - 1) / elapsed
 
-                if (
-                    not music_playing
-                    and remaining is not None
-                    and remaining < 30
-                ):
-                    # sometimes finishes a bit early, so bump to 32 arbitrarily
-                    pygame.mixer.music.play(start=31 - remaining)
-                    music_playing = True
+                    remaining = (total - n) / rate if rate and total else None
+
+                    if remaining is not None and remaining < 30:
+                        # start a second later than calculated time remaining,
+                        # seems to work well empirically
+                        pygame.mixer.music.play(start=31 - remaining)
+                        music_playing = True
         finally:
             pygame.mixer.music.fadeout(500)
